@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.3.2
+// @version      1.3.3
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -37,6 +37,7 @@
             let children = item.childNodes;
             let text = "";
             for (let child of children) {
+                console.log(child);
                 if(child.className.includes("Card__TitleContainer")){
                     text += child.firstChild.innerText + " | ";
                     if(child.firstChild.innerText.includes("StatTrak")){
@@ -45,6 +46,8 @@
                     } else {
                         item.setAttribute("st", false);
                     }
+
+                    item.setAttribute("cost", child.lastChild.innerText);
                 }
                 if(child.className.includes("Card__Name")){
                     text += child.innerText;
@@ -87,10 +90,13 @@
                         url: url,
                         onload: function(response) {
                             try {
+                                console.log(response);
                                 let jsonResponse = JSON.parse(response.response);
                                 console.log(jsonResponse);
                                 let priceTag = document.createElement('div');
-                                priceTag.innerText = jsonResponse.results[0].sell_price_text;
+                                priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
+                                let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
+                                priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
                                 priceTag.style.display = 'inline';
                                 button.target.parentNode.append(priceTag);
                                 button.target.remove();
