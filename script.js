@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.3.1
+// @version      1.3.2
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -26,7 +26,7 @@
 
     function getElementsFromPage(){
         let eles = document.getElementsByTagName('div');
-        let itemCards = new Array();
+        let itemCards = [];
         for (let item of eles) {
             if (item.className.includes("Card__Container") && (item.parentNode.className.includes("Rewards__List")) ) itemCards.push(item);
             if (item.className.includes("Pagination__Container")) item.addEventListener("click", function(){ checkIfPageLoaded(250); });
@@ -56,7 +56,7 @@
 
             let searchString = encodeURI(text).replace('%20()%20(FOR%20PREMIUM)', '').replace('%u2122', '%e2%84%a2').replace('%u2605', '%e2%98%85');
             let url = 'https://steamcommunity.com/market/listings/730/' + searchString;
-            if(url.length > 50 && item.lastChild.className != 'xplay_steam_addon_link'){
+            if(url.length > 50 && item.lastChild.className !== 'xplay_steam_addon_link'){
                 let button = document.createElement('div');
                 button.className = 'xplay_steam_addon_link';
                 button.innerHTML = '<a href="' + url + '" target="_blank">Check Steam Market</a>'
@@ -74,8 +74,8 @@
                 item.appendChild(button2);
                 button2.addEventListener('click', function(button2){
                     let button = button2;
-                    let stTag = "";
-                    if(item.getAttribute("st") == "true"){
+                    let stTag;
+                    if(item.getAttribute("st") === "true"){
                         stTag = "tag_strange";
                     } else {
                         stTag = "tag_normal";
