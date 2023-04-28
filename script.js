@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.3.4
+// @version      1.4.0
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -12,49 +12,85 @@
 (function() {
     'use strict';
 
-    checkIfPageLoaded(1500);
+    let retries = 0;
+    checkIfPageLoaded(300);
 
     function checkIfPageLoaded(to){
         setTimeout(function() {
             if (document.readyState === "complete") {
                 setTimeout(getElementsFromPage, to);
             } else {
-                checkIfPageLoaded(1500);
+                checkIfPageLoaded(300);
             }
         }, 100);
     }
 
     function getElementsFromPage(){
-        let eles = document.getElementsByTagName('div');
+        let eles = [];
+        try {
+            // All elements that are skin showcases or at least pretend to be
+            eles = Array.from(document.getElementsByTagName('main')[0].children[0].children[3].children[0].children[1].children);
+            // Condition, type, price, etc. selectors over the shop
+            document.getElementsByTagName('main')[0].children[0].children[3].children[0].children[0].addEventListener("click", function(){ checkIfPageLoaded(300); });
+            // Pagination under the shop
+            document.getElementsByTagName('main')[0].children[0].children[3].children[0].children[2].children[1].children[0].addEventListener("click", function(){ checkIfPageLoaded(300); });
+        } catch (e) {
+            if(retries < 50){
+                retries++;
+                checkIfPageLoaded(300);
+            } else {
+                console.warn("--- XPLAY.GG Store Enhance ---\nEither the page has taken too long to load or no skin showcases have been found. If the issue persists, please contact me: Treasure#4895");
+                return;
+            }
+        }
+
+        let matchCounter = 0;
+        let lastClass = "";
+
+        for(let i = 0; i < eles.length; i++){
+            if(eles[i].class === lastClass){
+                matchCounter++;
+            }
+            lastClass = eles[i].class;
+        }
+
+        if(matchCounter < 12){
+            console.warn("--- XPLAY.GG Store Enhance ---\nLess matching elements than required have been found, aborting script execution.");
+            return;
+        }
+
         let itemCards = [];
-        for (let item of eles) {
-            if (item.className.includes("Card__Container") && (item.parentNode.className.includes("Rewards__List")) ) itemCards.push(item);
-            if (item.className.includes("Pagination__Container")) item.addEventListener("click", function(){ checkIfPageLoaded(250); });
-            if (item.className.includes("Rewards__ControlsContainer")) item.addEventListener("click", function(){ checkIfPageLoaded(250); });
+
+        for(let i = 0; i < eles.length; i++){
+            if(eles[i].class === lastClass){
+                itemCards.push(eles[i]);
+            }
         }
 
         for (let item of itemCards) {
             let children = item.childNodes;
-            let text = "";
-            for (let child of children) {
-                if(child.className.includes("Card__TitleContainer")){
-                    text += child.firstChild.innerText + " | ";
-                    if(child.firstChild.innerText.includes("StatTrak")){
-                        item.setAttribute("st", true);
-                        child.firstChild.style.color = 'orangered';
-                    } else {
-                        item.setAttribute("st", false);
-                    }
+            if(item.innerText === "Showcase is empty") continue;
 
-                    item.setAttribute("cost", child.lastChild.innerText);
-                }
-                if(child.className.includes("Card__Name")){
-                    text += child.innerText;
-                }
-                if(child.className.includes("Card__Type")){
-                    text += " (" + child.innerText + ")";
-                }
+            if(children.length <= 3){
+                item.innerHTML = "<p style='text-align:center'>This ad was hidden by<br>XPLAY.GG Store Enhance</p>";
+                item.style.borderBottom = "none";
+                continue;
             }
+
+            let text = "";
+            text += children[1].firstChild.innerText + " | ";
+
+            if(children[1].firstChild.innerText.includes("StatTrak")){
+                item.setAttribute("st", true);
+                children[1].firstChild.style.color = 'orangered';
+            } else {
+                item.setAttribute("st", false);
+            }
+
+            item.setAttribute("cost", children[1].lastChild.innerText);
+
+            text += children[2].innerText;
+            text += " (" + children[3].innerText + ")";
 
             let searchString = encodeURI(text).replace('%20()%20(FOR%20PREMIUM)', '').replace('%u2122', '%e2%84%a2').replace('%u2605', '%e2%98%85');
             let url = 'https://steamcommunity.com/market/listings/730/' + searchString;
