@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.0
+// @version      1.4.1
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -89,7 +89,13 @@
 
             item.setAttribute("cost", children[1].lastChild.innerText);
 
-            text += children[2].innerText;
+            const phaseRegex = /\sPhase\s\d$/;
+            if(phaseRegex.test(children[2].innerText)){
+                text += children[2].innerText.replace(phaseRegex,"");
+            } else {
+                text += children[2].innerText;
+            }
+
             text += " (" + children[3].innerText + ")";
 
             let searchString = encodeURI(text).replace('%20()%20(FOR%20PREMIUM)', '').replace('%u2122', '%e2%84%a2').replace('%u2605', '%e2%98%85');
@@ -134,7 +140,11 @@
                                 button.target.parentNode.append(priceTag);
                                 button.target.remove();
                             } catch(e) {
-                                console.log('Error: ', e);
+                                if(e.message === "jsonResponse.results[0] is undefined"){
+                                    console.warn("The skin \"" + text + "\" could not be found on the Steam Community market");
+                                } else {
+                                    console.error("There was a problem while getting results from the Steam Community Market:\n", e.message);
+                                }
                             }
                         }
                     });
