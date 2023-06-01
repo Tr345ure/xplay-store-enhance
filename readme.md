@@ -18,12 +18,5 @@ You can then close the extension page.
 
 If you have questions regarding the operation of Tampermonkey, please refer to the [Tampermonkey documentation](https://www.tampermonkey.net/documentation.php?locale=en).
 
-## Permission prompt
-On your first use of the script, Tampermonkey will open this window to ask for permission to access an external domain. Check that the domain is *steamcommunity.com* and then click `👍 Always allow domain`.
-
-![Tampermonkey permission prompt](https://i.imgur.com/aC12SLr.png)
-
-If the permission is not granted, XPLAY.GG Store Enhance will not be able to fetch community market prices.
-
-## Updates
+## Automatic updates
 Tampermonkey should automatically install updates for the script. If you want to manually check for updates, click the time or date that appears in the `Last updated` column of the userscript overview.
