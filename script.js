@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.2
+// @version      1.4.3
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -139,9 +139,17 @@
                     let stTag;
                     // Get the StatTrak status of the skin
                     if(item.getAttribute("st") === "true"){
-                        stTag = "tag_strange";
+                        if(searchString.toLowerCase().includes("%e2%98%85")){
+                            stTag = "tag_unusual_strange";
+                        } else {
+                            stTag = "tag_strange";
+                        }
                     } else {
-                        stTag = "tag_normal";
+                        if(searchString.toLowerCase().includes("%e2%98%85")){
+                            stTag = "tag_unusual";
+                        } else {
+                            stTag = "tag_normal";
+                        }
                     }
                     // Build API request URL with search string from above, paying attention to StatTrak status
                     url = "https://steamcommunity.com/market/search/render/?query=" + searchString + "&start=0&count=1&search_descriptions=0&sort_column=default&sort_dir=desc&appid=730&category_730_ItemSet[]=any&category_730_ProPlayer[]=any&category_730_StickerCapsule[]=any&category_730_TournamentTeam[]=any&category_730_Weapon[]=any&category_730_Quality[]=" + stTag + "&norender=1";
