@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.3
+// @version      1.4.4
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -41,7 +41,7 @@
                 retries++;
                 checkIfPageLoaded(300);
             } else {
-                console.warn("--- XPLAY.GG Store Enhance ---\nEither the page has taken too long to load or no skin showcases have been found. If the issue persists, please contact me: Treasure#4895");
+                console.warn("--- XPLAY.GG Store Enhance ---\nEither the page has taken too long to load or no skin showcases have been found. If the issue persists, please contact me on Discord: @t.r.e.a.s.u.r.e");
                 return;
             }
         }
@@ -51,10 +51,10 @@
 
         // Check how many elements with the same class there are
         for(let i = 0; i < eles.length; i++){
-            if(eles[i].class === lastClass){
+            if(eles[i].className === lastClass){
                 matchCounter++;
             }
-            lastClass = eles[i].class;
+            lastClass = eles[i].className;
         }
 
         // If there are less than 12 elements with the same class, abort execution
@@ -67,7 +67,7 @@
 
         // Fill the item card array with elements with the found class name
         for(let i = 0; i < eles.length; i++){
-            if(eles[i].class === lastClass){
+            if(eles[i].className === lastClass){
                 itemCards.push(eles[i]);
             }
         }
