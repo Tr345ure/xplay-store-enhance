@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.4
+// @version      1.4.5
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -84,12 +84,16 @@
                 continue;
             }
 
-            // Check if skin is StatTrak
+            // Check if skin is StatTrak or Souvenir
             if(children[1].firstChild.innerText.includes("StatTrak")){
                 item.setAttribute("st", true);
                 children[1].firstChild.style.color = "orangered";
+            } else if (children[1].firstChild.innerText.includes("Souvenir")){
+                item.setAttribute("sv", true);
+                children[1].firstChild.style.color = "gold";
             } else {
                 item.setAttribute("st", false);
+                item.setAttribute("sv", false);
             }
 
             // Get xcoin price of the skin
@@ -137,13 +141,15 @@
                 button2.addEventListener("click", function(button2){
                     let button = button2;
                     let stTag;
-                    // Get the StatTrak status of the skin
+                    // Get the StatTrak or Souvenir status of the skin
                     if(item.getAttribute("st") === "true"){
                         if(searchString.toLowerCase().includes("%e2%98%85")){
                             stTag = "tag_unusual_strange";
                         } else {
                             stTag = "tag_strange";
                         }
+                    } else if(item.getAttribute("sv") === "true"){
+                        stTag = "tag_tournament";
                     } else {
                         if(searchString.toLowerCase().includes("%e2%98%85")){
                             stTag = "tag_unusual";
