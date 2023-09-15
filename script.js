@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.6
+// @version      1.4.7
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -47,19 +47,28 @@
             }
         }
 
-        let matchCounter = 0;
-        let lastClass = "";
+        // Arrays for collecting the amount and class names of full, empty and other (i.e. ads) showcases
+        // [className, amountOfOccurences];
+        let fullShowcases = ["", 0];
+        let emptyShowcases = ["", 0];
+        let otherShowcases = ["", 0];
 
-        // Check how many elements with the same class there are
+        // Check how many showcases of which sort are there and determine their class names
         for(let i = 0; i < eles.length; i++){
-            if(eles[i].className === lastClass){
-                matchCounter++;
+            if(eles[i].children.length >= 6){
+                fullShowcases[0] = eles[i].className;
+                fullShowcases[1]++;
+            } else if(eles[i].innerText === "Showcase is empty"){
+                emptyShowcases[0] = eles[i].className;
+                emptyShowcases[1]++;
+            } else {
+                otherShowcases[0] = eles[i].className;
+                otherShowcases[1]++;
             }
-            lastClass = eles[i].className;
         }
 
-        // If there are less than 12 elements with the same class, abort execution
-        if(matchCounter < 12){
+        // If there are less than 20 elements that are full or empty showcases, abort execution
+        if(fullShowcases[1] + emptyShowcases[1] < 20){
             console.warn("--- XPLAY.GG Store Enhance ---\nLess matching elements than required have been found, aborting script execution.");
             return;
         }
@@ -68,7 +77,7 @@
 
         // Fill the item card array with elements with the found class name
         for(let i = 0; i < eles.length; i++){
-            if(eles[i].className === lastClass){
+            if(eles[i].className === fullShowcases[0]){
                 itemCards.push(eles[i]);
             }
         }
@@ -76,14 +85,6 @@
         // Add buttons and their functionality to all skin showcases
         for (let item of itemCards) {
             let children = item.childNodes;
-            // Ignore empty showcases
-            if(item.innerText === "Showcase is empty") continue;
-            // Replace showcases that are probably ads
-            if(children.length <= 3){
-                item.innerHTML = "<p style='text-align:center'>This ad was hidden by<br>XPLAY.GG Store Enhance</p>";
-                item.style.borderBottom = "none";
-                continue;
-            }
 
             // Check if skin is StatTrak or Souvenir
             if(children[1].firstChild.innerText.includes("StatTrak")){
