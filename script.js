@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.7
+// @version      1.4.8
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -30,12 +30,17 @@
     function getElementsFromPage(){
         let eles = [];
         try {
-            // All elements that are skin showcases or at least pretend to be
+            // Get option button field and pagination and specify a handler to be able to remove the EventListeners later
+            let options = document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[0];
+            let pagination = document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[2].children[1].children[0];
+            let handler = function(){ checkIfPageLoaded(300); [options, pagination].forEach((ele) => ele.removeEventListener("click", handler)); };
+
+            // Add EventListeners to options and pagination to get skin showcases again after site switch
+            options.addEventListener("click", handler);
+            pagination.addEventListener("click", handler);
+
+            // Get all elements that are skin showcases or at least pretend to be
             eles = Array.from(document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[1].children);
-            // Condition, type, price, etc. selectors over the shop
-            document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[0].addEventListener("click", function(){ checkIfPageLoaded(300); });
-            // Pagination under the shop
-            document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[2].children[1].children[0].addEventListener("click", function(){ checkIfPageLoaded(300); });
         } catch (e) {
             // Try again if there are no elements yet
             if(retries < 50){
@@ -82,6 +87,12 @@
             }
         }
 
+        // Inject some CSS for prettier buttons and hover pointer
+        let css = ".xse_addon_button{ display: inline-block; padding: 10px 15px 10px 15px; margin: 20px 10px 0 0; background-color: #282d32; border-radius: 20px; text-align: center; } .xse_addon_button:hover{ cursor: pointer; }";
+        let style = document.createElement("style");
+        style.appendChild(document.createTextNode(css));
+        document.getElementsByTagName("head")[0].appendChild(style);
+
         // Add buttons and their functionality to all skin showcases
         for (let item of itemCards) {
             let children = item.childNodes;
@@ -120,12 +131,11 @@
             let url = "https://steamcommunity.com/market/listings/730/" + searchString;
 
             // If URL is properly built and there are no buttons yet...
-            if(url.length > 50 && item.lastChild.className !== "xplay_steam_addon_link"){
+            if(url.length > 50 && item.lastChild.className !== "xse_addon_button"){
                 // Add "Check Steam Market" button
                 let button = document.createElement("div");
-                button.className = "xplay_steam_addon_link";
+                button.className = "xse_addon_button";
                 button.innerHTML = "<a href='" + url + "' target='_blank'>Check Steam Market</a>";
-                button.style.cssText = "display: inline-block; padding: 10px 15px 10px 15px; margin: 20px 10px 0 0; background-color: #282d32; border-radius: 20px; text-align: center;";
                 item.style.height = "auto";
                 item.appendChild(button);
                 button.firstChild.style.textDecoration = "none";
@@ -133,9 +143,8 @@
 
                 // Add "Load Price" button
                 let button2 = document.createElement("div");
-                button2.className = "xplay_steam_addon_link";
+                button2.className = "xse_addon_button";
                 button2.innerHTML = "Load Price";
-                button2.style.cssText = "display: inline-block; padding: 10px 15px 10px 15px; margin-top: 20px; background-color: #282d32; border-radius: 20px; text-align: center;";
                 item.style.height = "auto";
                 item.appendChild(button2);
 
@@ -168,30 +177,55 @@
                         url: url,
                         onload: function(response) {
                             // Get and display result from Steam
-                            try {
-                                let jsonResponse = JSON.parse(response.response);
-                                let priceTag = document.createElement("div");
-                                priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
-                                let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
-                                priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
-                                priceTag.style.display = "inline";
-                                button.target.parentNode.append(priceTag);
-                                button.target.remove();
-                                // Show notification if something went wrong
-                            } catch(e) {
-                                if(e.message === "jsonResponse.results[0] is undefined"){
-                                    createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
-                                } else {
-                                    createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
-                                    console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
-                                }
+                            switch(response.status){
+                                case 200:
+                                    try {
+                                        let jsonResponse = JSON.parse(response.response);
+                                        let priceTag = document.createElement("div");
+                                        priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
+                                        let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
+                                        priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
+                                        priceTag.style.display = "inline";
+                                        button.target.parentNode.append(priceTag);
+                                        button.target.remove();
+                                        // Show notification if something went wrong
+                                    } catch(e) {
+                                        if(e.message === "jsonResponse.results[0] is undefined"){
+                                            createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
+                                        } else {
+                                            createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
+                                            console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
+                                        }
+                                    }
+                                    break;
+                                case 429:
+                                    createNotification(0, "Rate limited", "Could not get data from Steam because you've been rate limited.");
+                                    break;
+                                default:
+                                    createNotification(0, "Unexpected Status Code", "The request to the Steam API failed with status code: " + response.status);
                             }
                         }
                     });
                 });
             }
-
         }
+
+        // If a stale button already exists, remove it
+        if(Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).innerText === "Load all skins\n(Experimental)"){
+            Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).remove();
+        }
+
+        // Add button to check prices of all skins on the page
+        let checkAllButton = document.createElement("div");
+        checkAllButton.className = "xse_addon_button";
+        checkAllButton.innerHTML = "Load all skins<br><sup>(Experimental)</sup>";
+        checkAllButton.style.cssText = "color: orangered; position: fixed; bottom: 40px; right: 20px;";
+        document.body.appendChild(checkAllButton);
+
+        checkAllButton.addEventListener("click", function(){
+            itemCards.forEach((ele) => { ele.lastChild.click(); })
+            checkAllButton.remove();
+        });
     }
 
     function createNotification(type, title, message){
