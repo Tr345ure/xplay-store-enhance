@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.8
+// @version      1.4.9
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -149,7 +149,8 @@
                 item.appendChild(button2);
 
                 // Make XHR to Steam when "Load Price" button is clicked
-                button2.addEventListener("click", function(button2){
+                button2.addEventListener("click", function(e){
+                    e.stopPropagation();
                     let button = button2;
                     let stTag;
                     // Get the StatTrak or Souvenir status of the skin
@@ -186,8 +187,8 @@
                                         let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
                                         priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
                                         priceTag.style.display = "inline";
-                                        button.target.parentNode.append(priceTag);
-                                        button.target.remove();
+                                        button.parentNode.append(priceTag);
+                                        button.remove();
                                         // Show notification if something went wrong
                                     } catch(e) {
                                         if(e.message === "jsonResponse.results[0] is undefined"){
