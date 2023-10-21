@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.9
+// @version      1.4.10
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
+// @match        https://xplay.gg/ru/store
 // @grant        GM_xmlhttpRequest
 // @connect      steamcommunity.com
 // @updateURL    https://github.com/Tr345ure/xplay-store-enhance/raw/main/script.js
@@ -224,7 +225,9 @@
         document.body.appendChild(checkAllButton);
 
         checkAllButton.addEventListener("click", function(){
-            itemCards.forEach((ele) => { ele.lastChild.click(); })
+            itemCards.forEach((ele) => {
+                if(ele.lastChild.innerText === "Load Price") ele.lastChild.click();
+            })
             checkAllButton.remove();
         });
     }
