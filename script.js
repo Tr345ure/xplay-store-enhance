@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.4.10
+// @version      1.5.0
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -141,6 +141,7 @@
                 item.appendChild(button);
                 button.firstChild.style.textDecoration = "none";
                 button.firstChild.style.color = "white";
+                button.addEventListener("click", (e) => { e.stopPropagation(); });
 
                 // Add "Load Price" button
                 let button2 = document.createElement("div");
@@ -172,42 +173,52 @@
                     }
                     // Build API request URL with search string from above, paying attention to StatTrak status
                     url = "https://steamcommunity.com/market/search/render/?query=" + searchString + "&start=0&count=1&search_descriptions=0&sort_column=default&sort_dir=desc&appid=730&category_730_ItemSet[]=any&category_730_ProPlayer[]=any&category_730_StickerCapsule[]=any&category_730_TournamentTeam[]=any&category_730_Weapon[]=any&category_730_Quality[]=" + stTag + "&norender=1";
+                    makeSteamRequest(url, button, 0);
 
                     // Send request to Steam
-                    GM_xmlhttpRequest({
-                        method: "GET",
-                        url: url,
-                        onload: function(response) {
-                            // Get and display result from Steam
-                            switch(response.status){
-                                case 200:
-                                    try {
-                                        let jsonResponse = JSON.parse(response.response);
-                                        let priceTag = document.createElement("div");
-                                        priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
-                                        let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
-                                        priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
-                                        priceTag.style.display = "inline";
-                                        button.parentNode.append(priceTag);
-                                        button.remove();
-                                        // Show notification if something went wrong
-                                    } catch(e) {
-                                        if(e.message === "jsonResponse.results[0] is undefined"){
-                                            createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
-                                        } else {
-                                            createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
-                                            console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
+                    function makeSteamRequest(url, button, retries){
+                        button.innerText = "Loading...";
+                        button.style.backgroundColor = "transparent";
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: url,
+                            onload: function(response) {
+                                // Get and display result from Steam
+                                switch(response.status){
+                                    case 200:
+                                        try {
+                                            let jsonResponse = JSON.parse(response.response);
+                                            // Retry if response is empty despite code 200
+                                            if(jsonResponse.total_count === 0 && retries < 3){
+                                                makeSteamRequest(url, button, retries++);
+                                                break;
+                                            }
+                                            let priceTag = document.createElement("div");
+                                            priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
+                                            let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
+                                            priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
+                                            priceTag.style.display = "inline";
+                                            button.parentNode.append(priceTag);
+                                            button.remove();
+                                            // Show notification if something went wrong
+                                        } catch(e) {
+                                            if(e.message === "jsonResponse.results[0] is undefined"){
+                                                createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
+                                            } else {
+                                                createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
+                                                console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
+                                            }
                                         }
-                                    }
-                                    break;
-                                case 429:
-                                    createNotification(0, "Rate limited", "Could not get data from Steam because you've been rate limited.");
-                                    break;
-                                default:
-                                    createNotification(0, "Unexpected Status Code", "The request to the Steam API failed with status code: " + response.status);
+                                        break;
+                                    case 429:
+                                        createNotification(0, "Rate limited", "Could not get data from Steam because you've been rate limited.");
+                                        break;
+                                    default:
+                                        createNotification(0, "Unexpected Status Code", "The request to the Steam API failed with status code: " + response.status);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 });
             }
         }
