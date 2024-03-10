@@ -1,5 +1,8 @@
 #  XPLAY.GG Store Enhance
-## How to use
+## Installation
+### Quick Install
+If you already have Tampermonkey installed, [**click here**](https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js) to quick install the userscript. If you do not have Tampermonkey installed or the quick install is not working for you, please proceed to the regular install section.
+### Regular Install
 To be able to use this userscript, you need the Tampermonkey userscript manager extension for your browser.
 
 **Tampermonkey Download**  
