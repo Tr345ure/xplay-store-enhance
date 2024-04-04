@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.5.1
+// @version      1.5.2
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
-// @match        https://xplay.gg/ru/store
+// @match        https://xplay.gg/*/store
 // @grant        GM_xmlhttpRequest
 // @connect      steamcommunity.com
 // @updateURL    https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js
