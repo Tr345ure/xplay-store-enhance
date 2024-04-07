@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.5.3
+// @version      1.5.4
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -62,11 +62,12 @@
         let otherShowcases = ["", 0];
 
         // Check how many showcases of which sort are there and determine their class names
+        const emptyShowcaseMsgs = ["Showcase is empty","Cellule vide","Zelle leer","A bemutató üres","Komórka pusta","Ячейка пуста","El escaparate está vacío"];
         for(let i = 0; i < eles.length; i++){
             if(eles[i].children.length >= 6){
                 fullShowcases[0] = eles[i].className;
                 fullShowcases[1]++;
-            } else if(eles[i].innerText === "Showcase is empty"){
+            } else if(emptyShowcaseMsgs.includes(eles[i].innerText)){
                 emptyShowcases[0] = eles[i].className;
                 emptyShowcases[1]++;
             } else {
