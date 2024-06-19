@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.5.4
+// @version      1.6.0
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -34,16 +34,32 @@
         let eles = [];
         try {
             // Get option button field and pagination and specify a handler to be able to remove the EventListeners later
-            let options = document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[0];
-            let pagination = document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[2].children[1].children[0];
-            let handler = function(){ checkIfPageLoaded(300); [options, pagination].forEach((ele) => ele.removeEventListener("click", handler)); };
+            let options = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[2];
+            let storeSelection = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[1].children[0];
+            let pagination = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4];
+            let handler = function(){ checkIfPageLoaded(300); [options, storeSelection, pagination].forEach((ele) => ele.removeEventListener("click", handler)); };
 
             // Add EventListeners to options and pagination to get skin showcases again after site switch
             options.addEventListener("click", handler);
+            storeSelection.addEventListener("click", handler);
             pagination.addEventListener("click", handler);
 
             // Get all elements that are skin showcases or at least pretend to be
-            eles = Array.from(document.getElementsByTagName("main")[0].children[0].children[3].children[0].children[1].children);
+            let elesStore = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[3].children);
+            let elesAuction = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4].children);
+            if (elesStore.length > 10) {
+                eles = elesStore;
+            } else if(elesAuction.length > 10) {
+                eles = elesAuction;
+                eles.forEach(ele => {
+                    if(ele.children[5] !== undefined){
+                        ele.children[5].style = 'bottom: 5.2em;';
+                    }
+                });
+            } else {
+                console.warn("--- XPLAY.GG Store Enhance ---\nLess matching elements than required have been found, aborting script execution.");
+                return;
+            }
         } catch (e) {
             // Try again if there are no elements yet
             if(retries < 50){
@@ -92,7 +108,7 @@
         }
 
         // Inject some CSS for prettier buttons and hover pointer
-        let css = ".xse_addon_button{ display: inline-block; padding: 10px 15px 10px 15px; margin: 20px 10px 0 0; background-color: #282d32; border-radius: 20px; text-align: center; } .xse_addon_button:hover{ cursor: pointer; }";
+        let css = ".xse_addon_button{ display: inline-block; padding: 0.5em 0.8em 0.5em 0.8em; margin: 1em 0.5em 0 0; background-color: #282d32; border-radius: 1em; text-align: center; } .xse_addon_button:hover{ cursor: pointer; }";
         let style = document.createElement("style");
         style.appendChild(document.createTextNode(css));
         document.getElementsByTagName("head")[0].appendChild(style);
@@ -123,10 +139,11 @@
             // Skin name (i.e. "Amber Fade"), remove phase descriptors
             const phaseRegex = /\sPhase\s\d$/;
             if(phaseRegex.test(children[2].innerText)){
-                text += children[2].innerText.replace(phaseRegex,"");
+                text += children[2].innerText.split("\n")[0].replace(phaseRegex,"");
             } else {
-                text += children[2].innerText;
+                text += children[2].innerText.split("\n")[0];
             }
+
             // Skin condition (i.e. "Field-Tested")
             text += " (" + children[3].innerText + ")";
 
@@ -136,10 +153,10 @@
 
             // If URL is properly built and there are no buttons yet...
             if(url.length > 50 && item.lastChild.className !== "xse_addon_button"){
-                // Add "Check Steam Market" button
+                // Add "Steam Market" button
                 let button = document.createElement("div");
                 button.className = "xse_addon_button";
-                button.innerHTML = "<a href='" + url + "' target='_blank'>Check Steam Market</a>";
+                button.innerHTML = "<a href='" + url + "' target='_blank'>Steam Market &#129133;</a>";
                 item.style.height = "auto";
                 item.appendChild(button);
                 button.firstChild.style.textDecoration = "none";
@@ -227,9 +244,12 @@
         }
 
         // If a stale button already exists, remove it
-        if(Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).innerText === "Load all skins\n(Experimental)"){
-            Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).remove();
+        if(document.getElementsByClassName("xse_addon_button").length > 0){
+            if(Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).innerText === "Load all skins\n(Experimental)"){
+                Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).remove();
+            }
         }
+
 
         // Add button to check prices of all skins on the page
         let checkAllButton = document.createElement("div");
