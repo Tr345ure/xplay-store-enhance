@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.6.0
+// @version      1.6.1
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/store
@@ -147,8 +147,10 @@
             // Skin condition (i.e. "Field-Tested")
             text += " (" + children[3].innerText + ")";
 
-            // Remove premium tag and encode search string, replace some special chars, and finally build marketplace URL
-            let searchString = encodeURI(text).replace("%20()%20(FOR%20PREMIUM)", "").replace("%u2122", "%e2%84%a2").replace("%u2605", "%e2%98%85");
+            // Encode search string, replace some special chars, and finally build marketplace URL
+            //                                  TM sign for StatTrak          Star for special items             Single quote
+            //                                          v                              v                              v
+            let searchString = encodeURI(text).replace("%u2122", "%e2%84%a2").replace("%u2605", "%e2%98%85").replace("'", "%27");
             let url = "https://steamcommunity.com/market/listings/730/" + searchString;
 
             // If URL is properly built and there are no buttons yet...
