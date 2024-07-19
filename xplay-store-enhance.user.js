@@ -1,75 +1,242 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      1.6.1
+// @version      2.0.0
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
-// @match        https://xplay.gg/store
-// @match        https://xplay.gg/store/*
-// @match        https://xplay.gg/*/store
-// @match        https://xplay.gg/*/store/*
+// @match        https://xplay.gg/*
+// @icon         https://xplay.gg/static/favicons/favicon-96x96.png
+// @grant        window.onurlchange
 // @grant        GM_xmlhttpRequest
+// @grant        GM_addStyle
 // @connect      steamcommunity.com
-// @updateURL    https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js
-// @downloadURL  https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js
 // @noframes
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    let retries = 0;
-    checkIfPageLoaded(300);
+    // Add event listeners for initial load of page and every page change afterwards
+    window.addEventListener("load", siteLoadHandler, { once: true });
+    window.addEventListener("newurl", siteLoadHandler);
+    window.addEventListener("pagechange", siteLoadHandler);
 
-    function checkIfPageLoaded(to){
-        setTimeout(function() {
-            if (document.readyState === "complete") {
-                setTimeout(getElementsFromPage, to);
-            } else {
-                checkIfPageLoaded(300);
+    // Check for browser support of Tampermonkey's window.onurlchange
+    // If compatible, use the native implementation. If not, go to fallback mode
+    if (window.onurlchange === null) {
+        window.addEventListener("urlchange", (event) => {
+            window.dispatchEvent(new CustomEvent("newurl", {
+                detail: {
+                    url: event.url
+                }
+            }));
+        });
+    } else { // Use fallback mode: Check every 200ms if current URL is different from the last one
+        console.info("XPLAY.GG Store Enhance:\nOnUrlChange is NOT supported, continuing in fallback mode");
+        let oldURL = window.location.href;
+        let newURL;
+        setInterval(() => {
+            newURL = window.location.href;
+            if(newURL !== oldURL){
+                window.dispatchEvent(new CustomEvent("newurl", {
+                    detail: {
+                        url: newURL
+                    }
+                }));
+                oldURL = newURL;
             }
-        }, 100);
+        }, 200);
     }
 
-    function getElementsFromPage(){
-        let eles = [];
+    // Make resolve and reject for the showcase search public
+    let retryResolve, retryReject;
+
+    // Add CSS for buttons and notifications
+    GM_addStyle(
+        ".xse_addon_button {" +
+        "display: inline-block; padding: 0.5em 0.8em 0.5em 0.8em; margin: 1em 0.7em 0 0;" +
+        "color: white; background-color: #282d32; border-radius: 1em; text-align: center;" +
+        "}" +
+
+        ".xse_addon_button a { color: white; text-decoration: none; }" +
+        ".xse_addon_button:hover { cursor: pointer; color: #ddd; }" +
+        ".xse_addon_button a:hover { cursor: pointer; color: #ddd; }" +
+        ".xse_addon_priceTag { display: inline; }" +
+        ".xse_addon_loadAll { color: white; position: fixed; bottom: 4em; right: 2em; }" +
+
+        ".xse_addon_notifContainer {" +
+        "position: absolute; bottom: 2em; right: 3.5em; background-color: #282d32;" +
+        "border-radius: 0.5em; width: 30em; min-height: 6em" +
+        "}" +
+
+        ".xse_addon_notifTime {" +
+        "position: absolute; top: 0; left: 0; width: 30em; height: 0.5em; border-radius: 5px 5px 5px 0;" +
+        "}" +
+
+        ".xse_addon_notifTitle { padding: 0; margin: 0.7em 0 0.3em 0.8em; font-size: 1.7em; color: white; }" +
+        ".xse_addon_notifMessage { padding: 0 0 1em 0; margin: 0 0 0 1em; font-size: 1.4em; color: white; }"
+    );
+
+    // Check if the passed URL belongs to the store with the given regex
+    // Return true for store pages and false for non-store pages
+    function checkForStoreURL(url){
+        const storeURLRegex = new RegExp("https:\/\/xplay.gg\/([a-z]{2}\/)?store");
+        return storeURLRegex.test(url);
+    }
+
+    // Handle the load and newurl events and extract the current URL from them
+    // Call different functions depending on if it's a store page or not
+    function siteLoadHandler(event){
+        const loadDelay = 200;
+        let currentUrl;
+        switch(event.type){
+            case "load":
+                currentUrl = event.target.URL;
+                break;
+            case "newurl":
+                currentUrl = event.detail.url;
+                break;
+            case "pagechange":
+                retryReject("Page change event, stop retrying");
+                currentUrl = event.detail.url;
+                break;
+            default:
+                console.error("XPLAY.GG Store Enhance:\nUnknown event type was called in the site load handler");
+        }
+
+        if(checkForStoreURL(currentUrl)){
+            setTimeout(executeStore, loadDelay);
+        } else {
+            setTimeout(executeNonStore, loadDelay);
+        }
+    }
+
+
+    // When a store page is found, get skins and add buttons to them
+    function executeStore(){
+        let elements;
+        let showcaseClasses;
+
+        // Set onclick event listeners for all relevant buttons
+        setButtonListeners();
+
+        // If only empty showcases have been found, retry for 5 seconds
+        // or until showcases with skins have been found
+        const showcasesPopulated = new Promise((resolve, reject) => {
+            retryResolve = resolve;
+            retryReject = reject;
+            const retryDelay = 200;
+            function retry(retries = 0){
+                if(retries >= 25){
+                    return reject("Maximum amount of retries reached");
+                } else {
+                    elements = getElements();
+                    showcaseClasses = getShowcaseClasses(elements);
+
+                    if(showcaseClasses[0][1] === 0){
+                        setTimeout(() => { retry(++retries) }, retryDelay);
+                    } else {
+                        return resolve("Skins found");
+                    }
+                }
+            }
+            retry();
+        });
+
+        // Once full showcases have been found:
+        showcasesPopulated.then(() => {
+            // Push all full showcases to an array
+            let fullShowcases = getFullShowcases(elements, showcaseClasses[0][0]);
+            // Get the item attributes for all skins from full showcases
+            let itemAttributes = [];
+            fullShowcases.forEach((element) => {
+                itemAttributes.push(getItemAttributes(element));
+            });
+            // Change name color (i.e. for StatTrak) and add buttons
+            itemAttributes.forEach((element) => {
+                setNameColors(element);
+                addShowcaseButtons(element);
+            });
+            // Add the "load all skin prices" button to the page
+            addLoadAllButton(fullShowcases);
+        }).catch(() => {
+            // If the promise is rejected, do nothing.
+            // The promise can be rejected for the following reasons:
+            // 1) The requested page has been changed, no more retries needed
+            // 2) The maximum amount of retries has been reached
+            // 3) An unknown error occured during retrying.
+        });
+    }
+
+    // When a non-store page is found, remove the "load all skin prices" button
+    function executeNonStore(){
+        removeLoadAllButton();
+    }
+
+    // Get all relevant DOM elements needed to extract the skin showcases
+    function getElements(){
+        let elements = [];
+        const elementAmountRequired = 16;
+
         try {
-            // Get option button field and pagination and specify a handler to be able to remove the EventListeners later
-            let options = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[2];
-            let storeSelection = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[1].children[0];
-            let pagination = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4];
-            let handler = function(){ checkIfPageLoaded(300); [options, storeSelection, pagination].forEach((ele) => ele.removeEventListener("click", handler)); };
-
-            // Add EventListeners to options and pagination to get skin showcases again after site switch
-            options.addEventListener("click", handler);
-            storeSelection.addEventListener("click", handler);
-            pagination.addEventListener("click", handler);
-
             // Get all elements that are skin showcases or at least pretend to be
             let elesStore = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[3].children);
             let elesAuction = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4].children);
-            if (elesStore.length > 10) {
-                eles = elesStore;
-            } else if(elesAuction.length > 10) {
-                eles = elesAuction;
-                eles.forEach(ele => {
-                    if(ele.children[5] !== undefined){
-                        ele.children[5].style = 'bottom: 5.2em;';
-                    }
-                });
-            } else {
-                console.warn("--- XPLAY.GG Store Enhance ---\nLess matching elements than required have been found, aborting script execution.");
-                return;
+
+            // If not enough elements are in either element array, abort function
+            if(elesStore.length < elementAmountRequired && elesAuction.length < elementAmountRequired){
+                return false;
             }
-        } catch (e) {
-            // Try again if there are no elements yet
-            if(retries < 50){
-                retries++;
-                checkIfPageLoaded(300);
+
+            // Select which elements should be used depending on store or auction page
+            if (elesStore.length > elesAuction.length) {
+                elements = elesStore;
             } else {
-                console.warn("--- XPLAY.GG Store Enhance ---\nEither the page has taken too long to load or no skin showcases have been found. If the issue persists, please contact me on Discord: @t.r.e.a.s.u.r.e");
-                return;
+                elements = elesAuction;
+                // If it's an auction page, move auction timers up a bit
+                moveAuctionTimers(elements);
             }
+
+            return elements;
+        } catch (error) {
+            console.error("XPLAY.GG Store Enhance:\nError during element collection", error);
+            return false;
         }
+    }
+
+    // Set event listeners for store navigation buttons that don't trigger a URL change
+    function setButtonListeners(){
+        try {
+            // Get option button field, store/auction selector and pagination
+            let optionsButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[2];
+            let storeSelectionButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[1].children[0];
+            let paginationButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4];
+
+            // Specify handler for onclick events from the elements above
+            // This is done so the event listeners can be removed on page change and not fire multiple events
+            let buttonHandler = function(){
+                [optionsButtons, storeSelectionButtons, paginationButtons].forEach((ele) => ele.removeEventListener("click", buttonHandler));
+                window.dispatchEvent(new CustomEvent("pagechange", {
+                    detail: {
+                        url: window.location.href
+                    }
+                }));
+            };
+
+            // Add EventListeners to option button field, store/auction selector and pagination
+            optionsButtons.addEventListener("click", buttonHandler);
+            storeSelectionButtons.addEventListener("click", buttonHandler);
+            paginationButtons.addEventListener("click", buttonHandler);
+
+            return true;
+        } catch (error) {
+            console.error("XPLAY.GG Store Enhance:\nError while setting click listeners for buttons", error);
+            return false;
+        }
+    }
+
+    // Get class names of full, empty and other showcases because they are generated dynamically
+    function getShowcaseClasses(elements){
+        const reliableShowcasesRequired = 20;
 
         // Arrays for collecting the amount and class names of full, empty and other (i.e. ads) showcases
         // [className, amountOfOccurences];
@@ -79,199 +246,294 @@
 
         // Check how many showcases of which sort are there and determine their class names
         const emptyShowcaseMsgs = ["Showcase is empty","Cellule vide","Zelle leer","A bemutató üres","Komórka pusta","Ячейка пуста","El escaparate está vacío"];
-        for(let i = 0; i < eles.length; i++){
-            if(eles[i].children.length >= 6){
-                fullShowcases[0] = eles[i].className;
+        for(let i = 0; i < elements.length; i++){
+            if(elements[i].children.length >= 6){
+                fullShowcases[0] = elements[i].className;
                 fullShowcases[1]++;
-            } else if(emptyShowcaseMsgs.includes(eles[i].innerText)){
-                emptyShowcases[0] = eles[i].className;
+            } else if(emptyShowcaseMsgs.includes(elements[i].innerText)){
+                emptyShowcases[0] = elements[i].className;
                 emptyShowcases[1]++;
             } else {
-                otherShowcases[0] = eles[i].className;
+                otherShowcases[0] = elements[i].className;
                 otherShowcases[1]++;
             }
         }
 
         // If there are less than 20 elements that are full or empty showcases, abort execution
-        if(fullShowcases[1] + emptyShowcases[1] < 20){
-            console.warn("--- XPLAY.GG Store Enhance ---\nLess matching elements than required have been found, aborting script execution.");
-            return;
+        if(fullShowcases[1] + emptyShowcases[1] < reliableShowcasesRequired){
+            return false;
         }
 
-        let itemCards = [];
+        return [fullShowcases, emptyShowcases, otherShowcases];
+    }
 
-        // Fill the item card array with elements with the found class name
-        for(let i = 0; i < eles.length; i++){
-            if(eles[i].className === fullShowcases[0]){
-                itemCards.push(eles[i]);
+    // Return an array of the DOM elements of all full showcases
+    function getFullShowcases(elements, targetClass){
+        let fullShowcases = [];
+        elements.forEach((element) => {
+            if(element.className === targetClass){
+                fullShowcases.push(element);
             }
+        })
+        return fullShowcases;
+    }
+
+    // Get item attributes:
+    // StatTrak status, Souvenir status, xcoin price, weapon type, skin name, condition
+    function getItemAttributes(element){
+        let statTrak = false;
+        let souvenir = false;
+        let price;
+
+        const children = element.childNodes;
+        const weaponTypeElement = children[1].firstChild;
+        const weaponSkinElement = children[2];
+        const weaponConditionElement = children[3];
+        const xcoinPriceElement = children[1].lastChild;
+
+        // Check if skin is StatTrak or Souvenir
+        if(weaponTypeElement.innerText.includes("StatTrak")){
+            statTrak = true;
+        }
+        if (weaponTypeElement.innerText.includes("Souvenir")){
+            souvenir = true;
         }
 
-        // Inject some CSS for prettier buttons and hover pointer
-        let css = ".xse_addon_button{ display: inline-block; padding: 0.5em 0.8em 0.5em 0.8em; margin: 1em 0.5em 0 0; background-color: #282d32; border-radius: 1em; text-align: center; } .xse_addon_button:hover{ cursor: pointer; }";
-        let style = document.createElement("style");
-        style.appendChild(document.createTextNode(css));
-        document.getElementsByTagName("head")[0].appendChild(style);
+        // Get xcoin price of the skin
+        price = xcoinPriceElement.innerText;
 
-        // Add buttons and their functionality to all skin showcases
-        for (let item of itemCards) {
-            let children = item.childNodes;
+        return buildItemAttrArray(
+            element,
+            statTrak,
+            souvenir,
+            price,
+            weaponTypeElement.innerText,
+            weaponSkinElement.innerText,
+            weaponConditionElement.innerText
+        );
+    }
 
-            // Check if skin is StatTrak or Souvenir
-            if(children[1].firstChild.innerText.includes("StatTrak")){
-                item.setAttribute("st", true);
-                children[1].firstChild.style.color = "orangered";
-            } else if (children[1].firstChild.innerText.includes("Souvenir")){
-                item.setAttribute("sv", true);
-                children[1].firstChild.style.color = "gold";
-            } else {
-                item.setAttribute("st", false);
-                item.setAttribute("sv", false);
-            }
+    // Build an array from raw item attributes
+    function buildItemAttrArray(element, weaponSt, weaponSv, price, weaponType, weaponSkin, weaponCondition){
+        let text = [];
 
-            // Get xcoin price of the skin
-            item.setAttribute("cost", children[1].lastChild.innerText);
+        // Weapon type (i.e. "AK-47")
+        text.push(weaponType);
+        text.push(" | ");
 
-            // Begin assembling string with full skin name
-            let text = "";
-            // Weapon type (i.e. "AK-47")
-            text += children[1].firstChild.innerText + " | ";
-            // Skin name (i.e. "Amber Fade"), remove phase descriptors
-            const phaseRegex = /\sPhase\s\d$/;
-            if(phaseRegex.test(children[2].innerText)){
-                text += children[2].innerText.split("\n")[0].replace(phaseRegex,"");
-            } else {
-                text += children[2].innerText.split("\n")[0];
-            }
+        // Skin name (i.e. "Amber Fade"), remove phase descriptors
+        let skinName = weaponSkin;
+        // Remove second line (i.e. amount of bids for auctions)
+        skinName = skinName.split("\n")[0];
+        // Remove Phase descriptors (i.e. "Phase 2")
+        const phaseRegex = /\sPhase\s\d$/;
+        skinName = skinName.replace(phaseRegex,"");
+        text.push(skinName);
 
-            // Skin condition (i.e. "Field-Tested")
-            text += " (" + children[3].innerText + ")";
+        // Skin condition (i.e. "Field-Tested")
+        text.push(" (");
+        text.push(weaponCondition);
+        text.push(")");
 
-            // Encode search string, replace some special chars, and finally build marketplace URL
-            //                                  TM sign for StatTrak          Star for special items             Single quote
-            //                                          v                              v                              v
-            let searchString = encodeURI(text).replace("%u2122", "%e2%84%a2").replace("%u2605", "%e2%98%85").replace("'", "%27");
-            let url = "https://steamcommunity.com/market/listings/730/" + searchString;
+        // Encode search string, replace some special chars, and finally build marketplace URL
+        //                                         TM sign for StatTrak          Star for special items             Single quote
+        //                                                 v                              v                              v
+        let returnText = encodeURI(text.join("")).replace("%u2122", "%e2%84%a2").replace("%u2605", "%e2%98%85").replace("'", "%27");
 
-            // If URL is properly built and there are no buttons yet...
-            if(url.length > 50 && item.lastChild.className !== "xse_addon_button"){
-                // Add "Steam Market" button
-                let button = document.createElement("div");
-                button.className = "xse_addon_button";
-                button.innerHTML = "<a href='" + url + "' target='_blank'>Steam Market &#129133;</a>";
-                item.style.height = "auto";
-                item.appendChild(button);
-                button.firstChild.style.textDecoration = "none";
-                button.firstChild.style.color = "white";
-                button.addEventListener("click", (e) => { e.stopPropagation(); });
+        return [element, weaponSt, weaponSv, Number(price), returnText];
+    }
 
-                // Add "Load Price" button
-                let button2 = document.createElement("div");
-                button2.className = "xse_addon_button";
-                button2.innerHTML = "Load Price";
-                item.style.height = "auto";
-                item.appendChild(button2);
+    // Determine the market tag for the rarity so search results can be filtered reliably
+    function getMarketStTag(searchString, weaponSt, weaponSv){
+        // Check if item is a special item (i.e. knives, gloves)
+        const isKnife = searchString.toLowerCase().includes("%e2%98%85");
 
-                // Make XHR to Steam when "Load Price" button is clicked
-                button2.addEventListener("click", function(e){
-                    e.stopPropagation();
-                    let button = button2;
-                    let stTag;
-                    // Get the StatTrak or Souvenir status of the skin
-                    if(item.getAttribute("st") === "true"){
-                        if(searchString.toLowerCase().includes("%e2%98%85")){
-                            stTag = "tag_unusual_strange";
-                        } else {
-                            stTag = "tag_strange";
-                        }
-                    } else if(item.getAttribute("sv") === "true"){
-                        stTag = "tag_tournament";
-                    } else {
-                        if(searchString.toLowerCase().includes("%e2%98%85")){
-                            stTag = "tag_unusual";
-                        } else {
-                            stTag = "tag_normal";
-                        }
-                    }
-                    // Build API request URL with search string from above, paying attention to StatTrak status
-                    url = "https://steamcommunity.com/market/search/render/?query=" + searchString + "&start=0&count=1&search_descriptions=0&sort_column=default&sort_dir=desc&appid=730&category_730_ItemSet[]=any&category_730_ProPlayer[]=any&category_730_StickerCapsule[]=any&category_730_TournamentTeam[]=any&category_730_Weapon[]=any&category_730_Quality[]=" + stTag + "&norender=1";
-                    makeSteamRequest(url, button, 0);
-
-                    // Send request to Steam
-                    function makeSteamRequest(url, button, retries){
-                        button.innerText = "Loading...";
-                        button.style.backgroundColor = "transparent";
-                        GM_xmlhttpRequest({
-                            method: "GET",
-                            url: url,
-                            onload: function(response) {
-                                // Get and display result from Steam
-                                switch(response.status){
-                                    case 200:
-                                        try {
-                                            let jsonResponse = JSON.parse(response.response);
-                                            // Retry if response is empty despite code 200
-                                            if(jsonResponse.total_count === 0 && retries < 3){
-                                                makeSteamRequest(url, button, retries++);
-                                                break;
-                                            }
-                                            let priceTag = document.createElement("div");
-                                            priceTag.innerHTML = jsonResponse.results[0].sell_price_text;
-                                            let xcoinRatio = (jsonResponse.results[0].sell_price / item.getAttribute("cost") * 10).toFixed(2);
-                                            priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
-                                            priceTag.style.display = "inline";
-                                            button.parentNode.append(priceTag);
-                                            button.remove();
-                                            // Show notification if something went wrong
-                                        } catch(e) {
-                                            if(e.message === "jsonResponse.results[0] is undefined"){
-                                                createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
-                                            } else {
-                                                createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
-                                                console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
-                                            }
-                                        }
-                                        break;
-                                    case 429:
-                                        createNotification(0, "Rate limited", "Could not get data from Steam because you've been rate limited.");
-                                        break;
-                                    default:
-                                        createNotification(0, "Unexpected Status Code", "The request to the Steam API failed with status code: " + response.status);
-                                }
-                            }
-                        });
-                    }
-                });
-            }
+        if(weaponSv){
+            // Souvenir
+            return "tag_tournament";
         }
 
-        // If a stale button already exists, remove it
-        if(document.getElementsByClassName("xse_addon_button").length > 0){
-            if(Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).innerText === "Load all skins\n(Experimental)"){
-                Array.from(document.getElementsByClassName("xse_addon_button")).at(-1).remove();
-            }
+        if(weaponSt && isKnife){
+            // StatTrak AND special item
+            return "tag_unusual_strange";
+        } else if (weaponSt && !isKnife) {
+            // Just StatTrak
+            return "tag_strange";
+        } else if (!weaponSt && isKnife) {
+            // Just special item
+            return "tag_unusual";
+        } else if (!weaponSt && !isKnife) {
+            // Neither StatTrak nor special item
+            return "tag_normal";
+        } else {
+            console.error("XPLAY.GG Store Enhance:\nCouldn't get skin status tag");
         }
+    }
 
+    // Add the "load all skin prices" button to the page
+    function addLoadAllButton(elements){
+        // Remove all previous buttons to prevent stale elements for clicks
+        removeLoadAllButton();
 
-        // Add button to check prices of all skins on the page
+        // Add button to page
         let checkAllButton = document.createElement("div");
-        checkAllButton.className = "xse_addon_button";
-        checkAllButton.innerHTML = "Load all skins<br><sup>(Experimental)</sup>";
-        checkAllButton.style.cssText = "color: orangered; position: fixed; bottom: 40px; right: 20px;";
+        checkAllButton.className = "xse_addon_button xse_addon_loadAll";
+        checkAllButton.innerHTML = "Load all<br>skin prices";
         document.body.appendChild(checkAllButton);
 
+        // Add click event listener to the page that clicks all "load price" buttons it can find
         checkAllButton.addEventListener("click", function(){
-            itemCards.forEach((ele) => {
-                if(ele.lastChild.innerText === "Load Price") ele.lastChild.click();
+            elements.forEach((element) => {
+                if(element.lastChild.innerText === "Load Price") element.lastChild.click();
             })
             checkAllButton.remove();
         });
     }
 
-    function createNotification(type, title, message){
-        // Display duration of the notification in ms
-        const duration = 4000;
+    // Remove all "load all skin prices" buttons it can find from a page
+    function removeLoadAllButton(){
+        if(document.getElementsByClassName("xse_addon_loadAll").length > 0){
+            Array.from(document.getElementsByClassName("xse_addon_loadAll")).forEach((element) => {
+                element.remove();
+            });
+        }
+    }
 
+    // Add the "steam market" and "load price" to an element
+    function addShowcaseButtons(elementAttributes){
+        // Only add the buttons if the element doesn't have them yet
+        if(elementAttributes[0].lastChild.className !== "xse_addon_button" &&
+            elementAttributes[0].lastChild.className !== "xse_addon_priceTag") {
+            // Change element height to auto to make space for the buttons
+            elementAttributes[0].style.height = "auto";
+
+            // Add "steam market" button
+            let steamMarketButton = createSteamMarketButton(elementAttributes[4]);
+            elementAttributes[0].appendChild(steamMarketButton);
+
+            // Add "load price" button
+            let loadPriceButton = createLoadPriceButton(
+                elementAttributes[4],
+                elementAttributes[3],
+                elementAttributes[1],
+                elementAttributes[2]
+            );
+            elementAttributes[0].appendChild(loadPriceButton);
+        }
+    }
+
+    // Create the "steam market" button DOM element with the proper URL
+    function createSteamMarketButton(searchString){
+        let steamMarketUrl = "https://steamcommunity.com/market/listings/730/" + searchString;
+
+        let button = document.createElement("div");
+        button.className = "xse_addon_button";
+        button.innerHTML = "<a href='" + steamMarketUrl + "' target='_blank'>Steam Market &#129133;</a>";
+        button.addEventListener("click", (event) => { event.stopPropagation(); });
+
+        return button;
+    }
+
+    // Create the "load price" button DOM element with the proper URL for API request
+    // and add a click event listener to it to fire the XHR
+    function createLoadPriceButton(searchString, price, weaponSt, weaponSv){
+        let statTrakTag = getMarketStTag(searchString, weaponSt, weaponSv);
+        // Build the XHR URL
+        let requestUrl =
+            "https://steamcommunity.com/market/search/render/?query=" +
+            searchString +
+            "&start=0&count=1&search_descriptions=0&sort_column=default&sort_dir=desc&appid=730" +
+            "&category_730_ItemSet[]=any&category_730_ProPlayer[]=any&category_730_StickerCapsule[]=any" +
+            "&category_730_TournamentTeam[]=any&category_730_Weapon[]=any&category_730_Quality[]=" +
+            statTrakTag +
+            "&norender=1";
+
+        let button = document.createElement("div");
+        button.className = "xse_addon_button";
+        button.innerHTML = "Load Price";
+
+        // Add a click event listener to the button to request the skin price
+        // from Steam once the button is clicked
+        button.addEventListener("click", function(event){
+            event.stopPropagation();
+            makeSteamRequest(requestUrl, price, button)
+        });
+
+        return button;
+    }
+
+    // Make the actual XHR to Steam and retry if necessary
+    function makeSteamRequest(url, price, button, retries = 0){
+        // Change the button to indicate that the price is loading
+        button.innerText = "Loading...";
+        button.style.backgroundColor = "transparent";
+
+        // Fire the XHR
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: url,
+            onload: function(response) {
+                switch(response.status){
+                    // Received "OK" status
+                    case 200:
+                        try {
+                            let jsonResponse = JSON.parse(response.response);
+
+                            // Retry if response is empty despite code 200
+                            if(jsonResponse.total_count === 0 && retries < 3){
+                                makeSteamRequest(url, price, button, retries++);
+                                break;
+                            }
+
+                            // Once a price has been found, set the price tag
+                            setPriceTag(button, price, jsonResponse.results[0].sell_price, jsonResponse.results[0].sell_price_text)
+                        } catch(e) {
+                            // Show notification if something went wrong
+                            if(e.message === "jsonResponse.results[0] is undefined"){
+                                createNotification(0, "Skin not found", "The skin you requested the price for could not be found on the community market.");
+                            } else {
+                                createNotification(0, "Error", "An error occured while trying to get the price of the requested skin.");
+                                console.error("Error on line " + --e.lineNumber + ":\n" + e.message);
+                            }
+                        }
+                        break;
+                    // Received "Request Limit exceeded" status
+                    case 429:
+                        createNotification(0, "Rate limited", "Could not get data from Steam because you've been rate limited.");
+                        break;
+                    // Unexpected status code that's neither 200 or 429
+                    default:
+                        createNotification(0, "Unexpected Status Code", "The request to the Steam API failed with status code: " + response.status);
+                }
+            }
+        });
+    }
+
+    // Set the price tag, format it and remove the "load price" button
+    function setPriceTag(button, xcoinPrice, steamPrice, steamPriceText){
+        let priceTag = document.createElement("div");
+        let xcoinRatio = (steamPrice / xcoinPrice * 10).toFixed(2);
+        priceTag.className = "xse_addon_priceTag";
+        priceTag.innerHTML = steamPriceText;
+        priceTag.innerHTML += " <small>(" + xcoinRatio + "&hairsp;/&hairsp;1k)</small>";
+        button.parentNode.append(priceTag);
+        button.remove();
+    }
+
+    // Change name color for StatTrak and Souvenir skins
+    function setNameColors(element){
+        const weaponTypeElement = element[0].children[1].firstChild;
+
+        if(element[1]){
+            weaponTypeElement.style.color = "orangered";
+        }
+        if(element[2]){
+            weaponTypeElement.style.color = "gold";
+        }
+    }
+
+    // Create a notification element with given type, title, message and duration
+    function createNotification(type, title, message, duration = 4000){
         // Create elements needed for notification
         let notif = document.createElement("div");
         let notifTime = document.createElement("div");
@@ -285,16 +547,19 @@
         // Set time bar color according to supplied argument
         let typeColor;
         if(type === 1){
+            // Green
             typeColor = "#3d818f";
         } else {
+            // Red
             typeColor = "#eb5757";
         }
 
         // Set styles for notification elements
-        notif.style.cssText = "position: absolute; bottom: 20px; right: 35px; background-color: #282d32; border-radius: 5px; width: 300px; min-height: 60px;";
-        notifTime.style.cssText = "position: absolute; top: 0; left: 0; width: 300px; height: 5px; background-color: " + typeColor + "; border-radius: 5px 5px 5px 0; transition: width " + duration + "ms linear;";
-        notifTitle.style.cssText = "padding: 0; margin: 10px 0 3px 10px; font-size: 22px; color: white;";
-        notifMessage.style.cssText = "padding: 0 0 10px 0; margin: 0 0 0 10px; font-size: 14px; color: white;";
+        notif.className = "xse_addon_notifContainer";
+        notifTime.className = "xse_addon_notifTime";
+        notifTitle.className = "xse_addon_notifTitle";
+        notifMessage.className = "xse_addon_notifMessage";
+        notifTime.style.cssText = "background-color: " + typeColor + "; transition: width " + duration + "ms linear;";
 
         // Append notification to the page
         notif.appendChild(notifTime);
@@ -305,5 +570,14 @@
         // Animate time bar and remove notification after timeout
         setTimeout(function(){ notifTime.style.width = "0px"; } , 10);
         setTimeout(function(){ notif.remove(); } , duration+200);
+    }
+
+    // Move auction timers up because they are positioned relatively from the bottom of the showcase
+    function moveAuctionTimers(elements){
+        elements.forEach((ele) => {
+            if(ele.children[5] !== undefined){
+                ele.children[5].style = 'bottom: 5em;';
+            }
+        });
     }
 })();
