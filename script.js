@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         XPLAY.GG Store Enhance
-// @version      2.0.0
+// @version      2.1.0
 // @description  Enhances the xplay.gg store with additional features!
 // @author       Treasure
 // @match        https://xplay.gg/*
@@ -9,6 +9,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @connect      steamcommunity.com
+// @updateURL    https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js
+// @downloadURL  https://github.com/Tr345ure/xplay-store-enhance/raw/main/xplay-store-enhance.user.js
 // @noframes
 // ==/UserScript==
 
@@ -50,6 +52,8 @@
     // Make resolve and reject for the showcase search public
     let retryResolve, retryReject;
 
+    const emptyShowcaseMsgs = ["Showcase is empty","Cellule vide","Zelle leer","A bemutató üres","Komórka pusta","Ячейка пуста","El escaparate está vacío"];
+
     // Add CSS for buttons and notifications
     GM_addStyle(
         ".xse_addon_button {" +
@@ -76,17 +80,21 @@
         ".xse_addon_notifMessage { padding: 0 0 1em 0; margin: 0 0 0 1em; font-size: 1.4em; color: white; }"
     );
 
-    // Check if the passed URL belongs to the store with the given regex
-    // Return true for store pages and false for non-store pages
-    function checkForStoreURL(url){
-        const storeURLRegex = new RegExp("https:\/\/xplay.gg\/([a-z]{2}\/)?store");
-        return storeURLRegex.test(url);
+    // Check what part of the site we're currently on
+    // Return "store" for store and auction pages, "inventory" for profile inventory page and "another" for the rest
+    function checkForPageType(url){
+        const storeURLRegex = new RegExp("https:\/\/xplay\.gg\/([a-z]{2}\/)?store");
+        const inventoryURLRegex = new RegExp("https:\/\/xplay\.gg\/([a-z]{2}\/)?profile\/inventory");
+        
+        if (storeURLRegex.test(url)) return "store";
+        if (inventoryURLRegex.test(url)) return "inventory";
+        return "another";
     }
 
     // Handle the load and newurl events and extract the current URL from them
     // Call different functions depending on if it's a store page or not
     function siteLoadHandler(event){
-        const loadDelay = 200;
+        const loadDelay = 400;
         let currentUrl;
         switch(event.type){
             case "load":
@@ -103,21 +111,25 @@
                 console.error("XPLAY.GG Store Enhance:\nUnknown event type was called in the site load handler");
         }
 
-        if(checkForStoreURL(currentUrl)){
-            setTimeout(executeStore, loadDelay);
-        } else {
-            setTimeout(executeNonStore, loadDelay);
+        switch(checkForPageType(currentUrl)){
+            case "store":
+                setTimeout(setButtonListeners, loadDelay); // Set onclick event listeners for all relevant buttons
+                setTimeout(execute, loadDelay, getStoreElements, getStoreShowcaseClasses, getStoreFullShowcases);
+                break;
+            case "inventory":
+                setTimeout(execute, loadDelay, getInventoryElements, getInventoryShowcaseClasses, getInventoryFullShowcases);
+                break;
+            default:
+                setTimeout(removeLoadAllButton, loadDelay);
+                break;
         }
     }
 
 
-    // When a store page is found, get skins and add buttons to them
-    function executeStore(){
+    // When a store/inventory page is found, get skins and add buttons to them
+    function execute(getElementsFunc, getShowcaseClassesFunc, getFullShowcasesFunc){
         let elements;
         let showcaseClasses;
-
-        // Set onclick event listeners for all relevant buttons
-        setButtonListeners();
 
         // If only empty showcases have been found, retry for 5 seconds
         // or until showcases with skins have been found
@@ -129,8 +141,8 @@
                 if(retries >= 25){
                     return reject("Maximum amount of retries reached");
                 } else {
-                    elements = getElements();
-                    showcaseClasses = getShowcaseClasses(elements);
+                    elements = getElementsFunc();
+                    showcaseClasses = getShowcaseClassesFunc(elements);
 
                     if(showcaseClasses[0][1] === 0){
                         setTimeout(() => { retry(++retries) }, retryDelay);
@@ -145,7 +157,7 @@
         // Once full showcases have been found:
         showcasesPopulated.then(() => {
             // Push all full showcases to an array
-            let fullShowcases = getFullShowcases(elements, showcaseClasses[0][0]);
+            let fullShowcases = getFullShowcasesFunc(elements, showcaseClasses[0][0]);
             // Get the item attributes for all skins from full showcases
             let itemAttributes = [];
             fullShowcases.forEach((element) => {
@@ -167,13 +179,8 @@
         });
     }
 
-    // When a non-store page is found, remove the "load all skin prices" button
-    function executeNonStore(){
-        removeLoadAllButton();
-    }
-
     // Get all relevant DOM elements needed to extract the skin showcases
-    function getElements(){
+    function getStoreElements(){
         let elements = [];
         const elementAmountRequired = 16;
 
@@ -182,9 +189,9 @@
             let elesStore = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[3].children);
             let elesAuction = Array.from(document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4].children);
 
-            // If not enough elements are in either element array, abort function
+            // If not enough elements are in either element array, return an empty array, thus abort function
             if(elesStore.length < elementAmountRequired && elesAuction.length < elementAmountRequired){
-                return false;
+                return [];
             }
 
             // Select which elements should be used depending on store or auction page
@@ -198,23 +205,41 @@
 
             return elements;
         } catch (error) {
-            console.error("XPLAY.GG Store Enhance:\nError during element collection", error);
-            return false;
+            console.error("XPLAY.GG Store Enhance:\nError during store element collection", error);
+        }
+    }
+
+    // Get all relevant DOM elements needed to extract the skin showcases
+    function getInventoryElements(){
+        const elementAmountRequired = 4;
+
+        try {
+            // Get all elements that are skin showcases or at least pretend to be
+            let elements = Array.from(document.getElementsByTagName("main")[0].children[0].children[1].children[2].children[0].children[0].children[0].children[1].children[0].children);
+            
+            // If not enough elements in element array, abort function
+            if (elements.length < elementAmountRequired) return [];
+            
+            return elements;
+        } catch (error) {
+            console.error("XPLAY.GG Store Enhance:\nError during inventory element collection", error);
         }
     }
 
     // Set event listeners for store navigation buttons that don't trigger a URL change
     function setButtonListeners(){
         try {
-            // Get option button field, store/auction selector and pagination
+            // Get option button field, store/auction selector, pagination and skin search field
             let optionsButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[2];
             let storeSelectionButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[1].children[0];
-            let paginationButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[4];
+            let paginationButtons = document.getElementsByTagName("main")[0].children[0].children[2].children[0].lastChild.children[1].children[0];
+            let skinSearchField = document.getElementsByTagName("main")[0].children[0].children[2].children[0].children[2].children[1].children[0].children[1].children[1];
 
-            // Specify handler for onclick events from the elements above
+            // Specify handler for onclick/keydown events from the elements above
             // This is done so the event listeners can be removed on page change and not fire multiple events
             let buttonHandler = function(){
                 [optionsButtons, storeSelectionButtons, paginationButtons].forEach((ele) => ele.removeEventListener("click", buttonHandler));
+                skinSearchField.removeEventListener("keydown", buttonHandler);
                 window.dispatchEvent(new CustomEvent("pagechange", {
                     detail: {
                         url: window.location.href
@@ -222,20 +247,18 @@
                 }));
             };
 
-            // Add EventListeners to option button field, store/auction selector and pagination
+            // Add EventListeners to option button field, store/auction selector, pagination and skin search field
             optionsButtons.addEventListener("click", buttonHandler);
             storeSelectionButtons.addEventListener("click", buttonHandler);
             paginationButtons.addEventListener("click", buttonHandler);
-
-            return true;
+            skinSearchField.addEventListener("keydown", buttonHandler);
         } catch (error) {
             console.error("XPLAY.GG Store Enhance:\nError while setting click listeners for buttons", error);
-            return false;
         }
     }
 
     // Get class names of full, empty and other showcases because they are generated dynamically
-    function getShowcaseClasses(elements){
+    function getStoreShowcaseClasses(elements){
         const reliableShowcasesRequired = 20;
 
         // Arrays for collecting the amount and class names of full, empty and other (i.e. ads) showcases
@@ -245,34 +268,72 @@
         let otherShowcases = ["", 0];
 
         // Check how many showcases of which sort are there and determine their class names
-        const emptyShowcaseMsgs = ["Showcase is empty","Cellule vide","Zelle leer","A bemutató üres","Komórka pusta","Ячейка пуста","El escaparate está vacío"];
-        for(let i = 0; i < elements.length; i++){
-            if(elements[i].children.length >= 6){
-                fullShowcases[0] = elements[i].className;
+        elements.forEach((ele) => {
+            if(ele.children.length >= 6){
+                fullShowcases[0] = ele.className;
                 fullShowcases[1]++;
-            } else if(emptyShowcaseMsgs.includes(elements[i].innerText)){
-                emptyShowcases[0] = elements[i].className;
+            } else if(emptyShowcaseMsgs.includes(ele.innerText)){
+                emptyShowcases[0] = ele.className;
                 emptyShowcases[1]++;
             } else {
-                otherShowcases[0] = elements[i].className;
+                otherShowcases[0] = ele.className;
                 otherShowcases[1]++;
             }
-        }
+        })
 
-        // If there are less than 20 elements that are full or empty showcases, abort execution
+        // If there are less than 20 elements that are full or empty showcases, return an empty array, thus abort function
         if(fullShowcases[1] + emptyShowcases[1] < reliableShowcasesRequired){
-            return false;
+            return [["", 0],["", 0],["", 0]];
         }
 
         return [fullShowcases, emptyShowcases, otherShowcases];
     }
 
+    // Get class names of full, empty because they are generated dynamically
+    function getInventoryShowcaseClasses(elements){
+        const reliableShowcasesRequired = 4;
+
+        // Arrays for collecting the amount and class names of full, empty showcases
+        // [className, amountOfOccurences];
+        let fullShowcases = ["", 0];
+        let emptyShowcases = ["", 0];
+
+        // Check how many showcases of which sort are there and determine their class names
+        elements.forEach((ele) => {
+            if(ele.children[0].children.length >= 6){
+                fullShowcases[0] = ele.className;
+                fullShowcases[1]++;
+            } else if(emptyShowcaseMsgs.includes(ele.innerText)){
+                emptyShowcases[0] = ele.className;
+                emptyShowcases[1]++;
+            }
+        })
+
+        // If there are less than 4 elements that are full or empty showcases, return an empty array, thus abort function
+        if(fullShowcases[1] + emptyShowcases[1] < reliableShowcasesRequired){
+            return [["", 0],["", 0]];
+        }
+
+        return [fullShowcases, emptyShowcases];
+    }
+
     // Return an array of the DOM elements of all full showcases
-    function getFullShowcases(elements, targetClass){
+    function getStoreFullShowcases(elements, targetClass){
         let fullShowcases = [];
         elements.forEach((element) => {
             if(element.className === targetClass){
                 fullShowcases.push(element);
+            }
+        })
+        return fullShowcases;
+    }
+
+    // Return an array of the DOM elements of all full showcases
+    function getInventoryFullShowcases(elements, targetClass){
+        let fullShowcases = [];
+        elements.forEach((element) => {
+            if(element.className === targetClass){
+                fullShowcases.push(element.children[0]);
             }
         })
         return fullShowcases;
@@ -456,7 +517,7 @@
         // from Steam once the button is clicked
         button.addEventListener("click", function(event){
             event.stopPropagation();
-            makeSteamRequest(requestUrl, price, button)
+            makeSteamRequest(requestUrl, price, button);
         });
 
         return button;
@@ -568,8 +629,8 @@
         document.body.appendChild(notif);
 
         // Animate time bar and remove notification after timeout
-        setTimeout(function(){ notifTime.style.width = "0px"; } , 10);
-        setTimeout(function(){ notif.remove(); } , duration+200);
+        setTimeout(()=>{ notifTime.style.width = "0px"; }, 10);
+        setTimeout(()=>{ notif.remove(); }, duration+200);
     }
 
     // Move auction timers up because they are positioned relatively from the bottom of the showcase
